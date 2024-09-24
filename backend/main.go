@@ -12,11 +12,19 @@ import (
 func main() {
 	config.LoadConfig()
 	db.ConnectPostgres()
+	db.AutoMigrate() // Automatically create tables
 
 	r := gin.Default()
 
+	// Define a handler for the root path
+	r.GET("/", func(c *gin.Context) {
+		c.String(200, "Welcome to the Decentralized Payment Gateway!")
+	})
+
+	// Set up your application routes
 	routes.MerchantRoutes(r)
 	routes.PaymentRoutes(r)
 
+	// Start the server
 	r.Run(":8080")
 }

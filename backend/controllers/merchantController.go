@@ -1,7 +1,7 @@
-// controllers/merchantController.go
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -13,49 +13,80 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var secretKey = []byte("your_secret_key") //------------------
+var secretKey = []byte("your_secret_key")
 
 // Merchant registration
 func RegisterMerchant(c *gin.Context) {
-	var input models.Merchant //Receives a JSON payload representing a new merchant (models.Merchant)
+	var input models.Merchant
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
-	input.Password = string(hashedPassword) //It hashes the merchant's password using bcrypt to ensure passwords are securely stored.
+	// Log the incoming request to check if wallet_address and preferred_token are present
+	fmt.Printf("Received Merchant data: Name: %s, WalletAddress: %s, PreferredToken: %s\n",
+		input.Name, input.WalletAddress, input.PreferredToken)
 
-	services.CreateMerchant(&input) //The hashed password is then stored, and the merchant is created via the services.CreateMerchant function.
-	c.JSON(http.StatusCreated, gin.H{"message": "Merchant registered successfully"}) //Returns an HTTP 201 Created status and a success message if registration is successful, or a 400 Bad Request status if there's an issue with the input.
+	// Ensure that wallet address and preferred token are provided
+	if input.WalletAddress == "" || input.PreferredToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Wallet address and preferred token are required"})
+		return
+	}
+
+	// Hash the password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not hash password"})
+		return
+	}
+	input.Password = string(hashedPassword)
+
+	// Create the merchant and handle any errors
+	if err := services.CreateMerchant(&input); err != nil {
+		if err.Error() == "could not create merchant: unique constraint violation" {
+			c.JSON(http.StatusConflict, gin.H{"error": "Wallet address or password already exists"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "Merchant registered successfully"})
 }
 
 // Merchant login
 func LoginMerchant(c *gin.Context) {
-	var input models.MerchantLogin //Expects a JSON payload containing login credentials (models.MerchantLogin), including the wallet address and password.
-	var merchant models.Merchant
-
+	var input models.MerchantLogin
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
 
-	merchant = services.GetMerchantByWallet(input.WalletAddress)  //Retrieves the merchant from the database by wallet address
-	if merchant.ID == 0 || bcrypt.CompareHashAndPassword([]byte(merchant.Password), []byte(input.Password)) != nil { //Compares the provided password with the hashed password stored in the database
+	// Retrieve the merchant by wallet address
+	merchant, err := services.GetMerchantByWallet(input.WalletAddress)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
+	// Compare the provided password with the hashed password stored in the database
+	if bcrypt.CompareHashAndPassword([]byte(merchant.Password), []byte(input.Password)) != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	}
+
+	// Generate JWT token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"id":  merchant.ID,
-		"exp": time.Now().Add(time.Hour * 72).Unix(), //If the credentials are valid, a JWT is generated containing the merchant's ID and an expiration time (72 hours from login).
+		"exp": time.Now().Add(time.Hour * 72).Unix(), // Token expiration (72 hours)
 	})
 
 	tokenString, err := token.SignedString(secretKey)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate token"})   //Returns the JWT as a token in the response if the login is successful, or an error message with 401 Unauthorized for invalid credentials.
-		return     
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate token"})
+		return
 	}
 
+	// Respond with JWT token
 	c.JSON(http.StatusOK, gin.H{"token": tokenString})
 }

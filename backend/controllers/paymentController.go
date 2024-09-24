@@ -21,7 +21,7 @@ func CreatePaymentRequest(c *gin.Context) {
 }
 
 func GetPayments(c *gin.Context) {
-	merchantID, _ := c.Get("merchant_id") // Extract merchant ID from JWT
+	merchantID, _ := c.Get("merchant_id")                          // Extract merchant ID from JWT
 	payments := services.GetPaymentsForMerchant(merchantID.(uint)) //Fetches all payments associated with the merchant using services.GetPaymentsForMerchant, passing the merchant_id.
 	c.JSON(http.StatusOK, payments)
 }
