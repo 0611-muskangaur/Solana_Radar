@@ -13,7 +13,7 @@ func main() {
 	config.LoadConfig()
 	db.ConnectPostgres()
 	db.AutoMigrate() // Automatically create tables
-
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
 	// Define a handler for the root path

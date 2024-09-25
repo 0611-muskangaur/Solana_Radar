@@ -15,7 +15,6 @@ import (
 
 var secretKey = []byte("your_secret_key")
 
-// Merchant registration
 func RegisterMerchant(c *gin.Context) {
 	var input models.Merchant
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -43,11 +42,7 @@ func RegisterMerchant(c *gin.Context) {
 
 	// Create the merchant and handle any errors
 	if err := services.CreateMerchant(&input); err != nil {
-		if err.Error() == "could not create merchant: unique constraint violation" {
-			c.JSON(http.StatusConflict, gin.H{"error": "Wallet address or password already exists"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
 
