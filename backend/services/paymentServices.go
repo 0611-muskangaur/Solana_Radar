@@ -1,17 +1,40 @@
-// services/paymentService.go
 package services
 
 import (
-	"decentralised_payment_gateway/db"
 	"decentralised_payment_gateway/models"
+	"gorm.io/gorm"
 )
 
-func CreatePayment(payment *models.Payment) { //This function accepts a Payment object and stores it in the database
-	db.DB.Create(payment)
+type PaymentService struct {
+	db *gorm.DB
 }
 
-func GetPaymentsForMerchant(merchantID uint) []models.Payment { //This function retrieves all payments associated with a specific merchant, identified by their merchantID
+func NewPaymentService(db *gorm.DB) *PaymentService {
+	return &PaymentService{db: db}
+}
+
+// Create a payment.
+func (ps *PaymentService) CreatePayment(payment *models.Payment) error {
+	return ps.db.Create(payment).Error
+}
+
+// Fetch payments for a merchant.
+func (s *PaymentService) GetPaymentsForMerchant(merchantID uint) ([]models.Payment, error) {
 	var payments []models.Payment
-	db.DB.Where("merchant_id = ?", merchantID).Find(&payments)
-	return payments
+	if err := s.db.Where("merchant_id = ?", merchantID).Find(&payments).Error; err != nil {
+		return nil, err
+	}
+	return payments, nil
+}
+
+// Create a transaction.
+func (ps *PaymentService) CreateTransaction(transaction *models.Transaction) error {
+	return ps.db.Create(transaction).Error
+}
+
+// Update transaction status based on webhook data.
+func (ps *PaymentService) UpdateTransactionStatus(transaction *models.Transaction) error {
+	return ps.db.Model(&models.Transaction{}).
+		Where("transaction_hash = ?", transaction.TransactionHash).
+		Update("status", transaction.Status).Error
 }

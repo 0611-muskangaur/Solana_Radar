@@ -30,6 +30,11 @@ func ConnectPostgres() { // This function establishes a connection to the Postgr
 	fmt.Println("Database connected!")
 }
 
+// GetDB returns the database connection
+func GetDB() *gorm.DB {
+	return DB
+}
+
 func AutoMigrate() { // This function creates or updates the tables for Merchant and Payment based on the defined struct fields in the models package.
 	err := DB.AutoMigrate(&models.Merchant{}, &models.Payment{}) // Using models here
 	if err != nil {
