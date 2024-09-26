@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -21,10 +20,6 @@ func RegisterMerchant(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	// Log the incoming request to check if wallet_address and preferred_token are present
-	fmt.Printf("Received Merchant data: Name: %s, WalletAddress: %s, PreferredToken: %s\n",
-		input.Name, input.WalletAddress, input.PreferredToken)
 
 	// Ensure that wallet address and preferred token are provided
 	if input.WalletAddress == "" || input.PreferredToken == "" {
