@@ -2,11 +2,11 @@ package controllers
 
 import (
 	"decentralised_payment_gateway/models"
+	"decentralised_payment_gateway/res"
 	"decentralised_payment_gateway/services"
-
+	"fmt" // Make sure to import fmt for logging
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid" // Import the UUID package
-	"net/http"
+	"github.com/google/uuid"
 	"strconv"
 )
 
@@ -18,74 +18,78 @@ func NewPaymentController(service *services.PaymentService) *PaymentController {
 	return &PaymentController{service: service}
 }
 
+// CreatePaymentRequest handles the creation of a new payment request.
 func (pc *PaymentController) CreatePaymentRequest(c *gin.Context) {
 	var payment models.Payment
 	if err := c.ShouldBindJSON(&payment); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		res.BadRequest(c, err)
 		return
 	}
 
 	merchantIDFloat, exists := c.Get("merchant_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Merchant ID not found in context"})
+		res.Unauthorized(c, nil)
 		return
 	}
 
-	// Convert merchantID from float64 to uint
 	merchantID := uint(merchantIDFloat.(float64))
 	payment.MerchantID = merchantID
-
-	// Generate a unique transaction hash
-	payment.TransactionHash = uuid.New().String() // Generate a new UUID
+	payment.TransactionHash = uuid.New().String()
 
 	if err := pc.service.CreatePayment(&payment); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		res.InternalServerError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Payment request created", "payment_id": payment.ID})
+	res.SuccessOK(c, gin.H{"message": "Payment request created", "payment_id": payment.ID})
 }
 
+// GetPayments fetches payment requests for a specific merchant.
 func (pc *PaymentController) GetPayments(c *gin.Context) {
-	merchantIDStr := c.Query("merchant_id") // Get merchant ID from query parameters
-
-	// Check if the merchant ID is empty
+	merchantIDStr := c.Query("merchant_id")
 	if merchantIDStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Merchant ID is required"})
+		res.BadRequest(c, nil)
 		return
 	}
 
-	// Convert merchantIDStr to a float64 and handle potential errors
 	merchantIDFloat, err := strconv.ParseFloat(merchantIDStr, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid merchant ID"})
+		res.BadRequest(c, err)
 		return
 	}
 	merchantID := uint(merchantIDFloat)
 
-	// Get payments for the merchant
 	payments, err := pc.service.GetPaymentsForMerchant(merchantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		res.InternalServerError(c, err)
 		return
 	}
 
-	// Return the payments in JSON format
-	c.JSON(http.StatusOK, payments)
+	res.SuccessOK(c, payments)
 }
 
-// HandleWebhook processes the webhook to update transaction status.
+// HandleWebhook handles transaction status updates via webhook.
 func (pc *PaymentController) HandleWebhook(c *gin.Context) {
 	var transaction models.Transaction
 	if err := c.ShouldBindJSON(&transaction); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		res.BadRequest(c, err)
 		return
 	}
 
-	if err := pc.service.UpdateTransactionStatus(&transaction); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// Log the received transaction for debugging
+	fmt.Printf("Received transaction: %+v\n", transaction)
+
+	// Attempt to update the transaction status
+	err := pc.service.UpdateTransactionStatus(&transaction)
+	if err != nil {
+		res.InternalServerError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Transaction updated", "transaction_id": transaction.ID})
+	// After the update, set the ID to the transaction ID
+	transactionID := transaction.ID // Ensure this gets set in UpdateTransactionStatus
+	res.SuccessOK(c, gin.H{
+		"message":        "Transaction updated",
+		"transaction_id": transactionID, // Return the correct ID
+	})
 }
